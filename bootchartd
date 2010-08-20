@@ -1,0 +1,206 @@
+#!/bin/bash
+#
+# Bootchart logger script
+# Ziga Mahkovec  <ziga.mahkovec@klika.si>
+# Michael Meeks  <michael.meeks@novell.com>
+#
+# This script is used for data collection for the bootchart2
+# boot performance visualization tool.
+#
+# To profile the boot process, bootchartd should be called instead of
+# /sbin/init.  Modify the kernel command line to include:
+# 
+# init=/sbin/bootchartd initcall_debug printk.time=y quiet
+#
+# bootchartd will then start itself in background and exec /sbin/init
+# (or an alternative init process if specified using bootchart_init=)
+#
+# To profile a running system, run:
+# $ /sbin/bootchartd start; sleep 30; /sbin/bootchartd stop
+#
+
+# Use a directory we know will be there, such that we can mount
+# our 'proc' without having to touch a (potentially) read-only
+# file-system.
+TMPFS="/lib/bootchart/tmpfs"
+COLLECTOR_BIN="/lib/bootchart/bootchart-collector"
+
+# some initrds don't have usleep etc.
+USLEEP="$COLLECTOR_BIN --usleep"
+
+# we need to find our tools
+PATH="/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
+
+# Defaults, in case we can't find our configuration
+SAMPLE_HZ=50
+BUILDLOG_DEST=/var/log/bootchart.tgz
+AUTO_RENDER="no"
+AUTO_RENDER_DIR="/var/log"
+AUTO_RENDER_FORMAT="png"
+
+# Read configuration.
+CONF="/etc/bootchartd.conf"
+if [ -f $PWD/bootchartd.conf ]; then
+	. $PWD/bootchartd.conf
+elif [ -f $CONF ]; then
+        . $CONF
+else
+        echo "$CONF missing"
+fi
+
+# Start the boot logger.
+start()
+{
+	# If in init start ourselves in our familiar system
+	if [ -n "$INIT_PROCESS" ]; then
+#		echo "bootchartd started in init" >> kmsg
+		/lib/bootchart/bootchart-collector $SAMPLE_HZ
+
+	# Otherwise, manually launched to profile something
+	else
+#		echo "bootchartd started manually" >> kmsg
+		/lib/bootchart/bootchart-collector -r $SAMPLE_HZ &
+
+		if [ "$#" -gt 0 ]; then
+			# If a command was passed, run it
+			# (used for profiling specific applications)
+			echo "profile.process = $( basename $1 )" >> header
+			$@
+			stop
+		else
+			echo "no command passed, you need to manually stop the service sometime"
+		fi
+	fi
+}
+
+# Wait for the boot process to end.
+wait_boot()
+{
+	local runlevel=$( sed -n '/^ *#/d; /^$/d; s/.*:\(.*\):initdefault:.*/\1/g; p; q' /etc/inittab )
+
+	# The processes we have to wait for
+	local exit_proc="kdm_greet xterm konsole gnome-terminal metacity mutter compiz ldm icewm-session"
+ 	# Don't exit until *all* the mandatory procs are running. Only used if exit_proc
+ 	# is unset.
+ 	local mandatory_procs="nautilus mutter"
+
+	# Wait for /proc first - without it we have issues
+	while [ ! -e /proc/cmdline ]; do
+	    $USLEEP 5000
+	done
+
+	# early_login in FC4 starts gdm early, so fall back to mingetty
+	local early_login="no"
+	grep -q early_login proc/cmdline && early_login="yes"
+	if [ "x$runlevel" = "x2" -o "x$runlevel" = "x3" -o "$early_login" = "yes" ]; then
+		exit_proc="mingetty agetty rungetty getty"
+	fi
+	while true; do
+		if [ -n "$exit_proc" -a -n "$( pidof $exit_proc )" ]; then
+			# give an unambiguous settle afterwards - so we get
+			# more post-login data for slow systems
+			$USLEEP 20000000
+
+			# Write / flush the log files
+			stop
+			return
+		fi
+		$USLEEP 200000
+	done;
+}
+
+# Extract the log data from the running bootchart collector
+# process (via ptrace) - fun. Store logs into $BOOTLOG_DEST.
+stop()
+{
+	tmpdir=`mktemp -d /tmp/bootchart.XXXXXXXXXX`
+	if [ "z$tmpdir" = "z" ]; then
+	    echo "Failed to generate directory for logging"
+	    exit 1
+	fi
+
+	if ! /lib/bootchart/bootchart-collector --dump $tmpdir; then
+	    echo "Can't extract boot chart from collector"
+	    exit 1
+	fi
+
+	cd $tmpdir
+	if [ ! -e proc_stat.log ]; then
+		echo "Can't find bootchart output in $tmpdir - aborting"
+		exit 1
+	fi
+
+	# Archive it all up into the bootchart output
+	tar -zcf "$BOOTLOG_DEST" header dmesg *.log
+
+	rm -Rf $tmpdir
+
+	# Render the chart if configured (and the renderer is installed)
+	if [ "$AUTO_RENDER" = "yes" -a -x /usr/bin/pybootchartgui ]; then
+                cd $AUTO_RENDER_DIR
+		/usr/bin/pybootchartgui -o "$AUTO_RENDER_DIR"/bootchart.$AUTO_RENDER_FORMAT -f $AUTO_RENDER_FORMAT "$BOOTLOG_DEST"
+        fi
+}
+
+if [ $$ -eq 1 ]; then
+        # Either started by the kernel - in which case, we start the
+        # logger in background and exec init [ re-using this pid (1) ]
+        # Or - started after the initrd has completed, in which case
+        # we try to do nothing much.
+	INIT_PROCESS="yes"
+	echo "Starting bootchart logging"
+
+	# Are we running in the initrd ?
+	if [ ! -e /dev/random ]; then
+		IN_INITRD="yes"
+		start &
+	else # running inside the main system
+		echo "bootchart: no initrd used; starting"
+		start &
+		wait_boot &
+		# wait a little, until the collector is going, before allowing
+		# the rest of the system to charge ahead, so we catch it
+		$USLEEP 250000
+		echo "bootchart continuing boot" >> $TMPFS/kmsg
+	fi
+	
+	# Optionally, an alternative init(1) process may be specified using
+	# the kernel command line (e.g. "bootchart_init=/sbin/initng")
+	init="/sbin/init"
+	for i in $@; do
+		if [ "${i%%=*}" = "bootchart_init" ]; then
+			init="${i#*=}"
+			break
+		fi
+                if [ "${i%%=*}" = "init" ]; then
+			_init=${i#*=}
+			if test "$_init" != "/sbin/bootchartd"; then
+                           init="$_init"
+                        fi
+                        break
+                fi
+	done
+	export PATH=$OLDPATH
+
+	# switch to - either the initrd's init, or the main system's
+	exec $init $*
+fi
+
+case "$1" in
+	"start")
+		# Started by the user
+		shift
+		start $@
+		;;
+	"wait")
+		# Wait for boot
+		wait_boot
+		;;
+	"stop")
+		stop
+		;;
+	*)
+		echo $"Usage: $0 {init|start|stop}"
+		;;
+esac
+
