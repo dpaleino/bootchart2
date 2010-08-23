@@ -1,0 +1,28 @@
+Source: bootchart2
+Section: utils
+Priority: optional
+Maintainer: David Paleino <dapal@debian.org>
+Build-Depends:
+ debhelper (>= 7.0.50~)
+ , python-support (>= 0.90.0~)
+Standards-Version: 3.9.1
+Homepage: http://github.com/mmeeks/bootchart
+Vcs-Git: git://git.debian.org/collab-maint/bootchart2.git
+Vcs-Browser: http://git.debian.org/?p=collab-maint/bootchart2.git
+
+Package: bootchart2
+Architecture: any
+Depends:
+ ${shlibs:Depends}
+ , ${misc:Depends}
+Conflicts: bootchart
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
+Package: pybootchartgui
+Architecture: all
+Depends:
+ ${misc:Depends}
+ , ${python:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>

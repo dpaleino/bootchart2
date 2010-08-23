@@ -1,0 +1,5 @@
+bootchart2 (0.12.3-1) UNRELEASED; urgency=low
+
+  * Initial release (Closes: #590858)
+
+ -- David Paleino <dapal@debian.org>  Fri, 20 Aug 2010 22:42:15 +0200
