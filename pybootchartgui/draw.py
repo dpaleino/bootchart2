@@ -203,8 +203,13 @@ def draw_chart(ctx, color, fill, chart_bounds, data, proc_tree):
 		y = (point[1] - y_base) * -yscale + y_trans + bar_h
 		return x, y
 
-	xscale = float (chart_bounds[2]) / max (x for (x, y) in data)
-	yscale = float (chart_bounds[3]) / max (y for (x, y) in data)
+	max_x = max (x for (x, y) in data)
+	max_y = max (y for (x, y) in data)
+	# avoid divide by zero when we render I/O utilization and max is 0
+	if max_y == 0:
+		max_y = 1.0
+	xscale = float (chart_bounds[2]) / max_x
+	yscale = float (chart_bounds[3]) / max_y
     
 	first = transform_point_coords (data[0], x_shift, 0, xscale, yscale, \
 				        chart_bounds[0], chart_bounds[1])
@@ -527,7 +532,8 @@ def draw_cuml_graph(ctx, proc_tree, chart_bounds, duration, sec_w):
 		print "degenerate boot chart"
 		return
 
-	pix_per_ns = chart_bounds[3] / total_time
+	# be conservative to avoid overlap of cumulative chart
+	pix_per_ns = math.floor (chart_bounds[3] / total_time * 100000000) / 100000000
 #	print "total time: %g pix-per-ns %g" % (total_time, pix_per_ns)
 
 	# FIXME: we really need to aggregate by process name
@@ -547,9 +553,18 @@ def draw_cuml_graph(ctx, proc_tree, chart_bounds, duration, sec_w):
 	legends = []
 	labels = []
 	pid_to_color = {}
+	m_proc_list = {}
+
+	# merge pids with the same cmd
+	for proc in proc_tree.process_list:
+		if not proc.cmd in m_proc_list:
+			m_proc_list[proc.cmd] = proc
+			continue
+		p = m_proc_list[proc.cmd]
+		proc_tree.merge_processes(p, proc)
 
 	# render each pid in order
-	for proc in proc_tree.process_list:
+	for proc in m_proc_list.values():
 		row = {}
 		cuml = 0.0
 

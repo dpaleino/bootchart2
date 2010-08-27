@@ -26,12 +26,7 @@ bootchart-collector: $(COLLECTOR)
 	$(CC) -pthread -Icollector -o $@ $^
 
 py-install-compile:
-	install -d $(DESTDIR)$(PY_SITEDIR)/pybootchartgui
-	cp pybootchartgui/*.py $(DESTDIR)$(PY_SITEDIR)/pybootchartgui
-	install -D -m 755 pybootchartgui.py $(DESTDIR)$(BINDIR)/pybootchartgui
-	cd $(DESTDIR)$(PY_SITEDIR)/pybootchartgui ; \
-		python $(PY_LIBDIR)/py_compile.py *.py ; \
-		PYTHONOPTIMIZE=1 python $(PY_LIBDIR)/py_compile.py *.py
+	PKG_VER=$(VER) python setup.py install
 
 install-chroot:
 	install -d $(DESTDIR)/lib/bootchart/tmpfs
@@ -42,7 +37,6 @@ install-collector: all install-chroot
 	install -m 755 -D bootchart-collector $(DESTDIR)/lib/bootchart/bootchart-collector
 
 install: all py-install-compile install-collector
-	mkdir -p $RPM_BUILD_ROOT/lib/bootchart/mnt
 
 clean:
 	-rm -f bootchart-collector bootchart-collector-dynamic collector/*.o

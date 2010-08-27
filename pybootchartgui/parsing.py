@@ -212,21 +212,17 @@ def _parse_proc_stat_log(file):
 		
 def _parse_proc_disk_stat_log(file, numCpu):
 	"""
-	Parse file for disk stats, but only look at the whole disks, eg. sda,
+	Parse file for disk stats, but only look at the whole device, eg. sda,
 	not sda1, sda2 etc. The format of relevant lines should be:
 	{major minor name rio rmerge rsect ruse wio wmerge wsect wuse running use aveq}
 	"""
-	disk_regex_re = re.compile ('^[hsv]d.$')
-	
+	disk_regex_re = re.compile ('^([hsv]d.|mtdblock\d|mmcblk\d)$')
+
 	# this gets called an awful lot.
 	def is_relevant_line(linetokens):
 		if len(linetokens) != 14:
 			return False
 		disk = linetokens[2]
-		if len (disk) != 3:
-			return False
-		if disk == 'sda':
-			return True
 		return disk_regex_re.match(disk)
 	
 	disk_stat_samples = []
@@ -273,6 +269,8 @@ def _parse_dmesg(writer, file):
 	inc = 1.0 / 1000000
 	kernel = Process(writer, idx, "k-boot", 0, 0.1)
 	processMap['k-boot'] = kernel
+	base_ts = False
+	max_ts = 0
 	for line in file.read().split('\n'):
 		t = timestamp_re.match (line)
 		if t is None:
@@ -280,6 +278,19 @@ def _parse_dmesg(writer, file):
 			continue
 
 		time_ms = float (t.group(1)) * 1000
+		# looks like we may have a huge diff after the clock
+		# has been set up. This could lead to huge graph:
+		# so huge we will be killed by the OOM.
+		# So instead of using the plain timestamp we will
+		# use a delta to first one and skip the first one
+		# for convenience
+		if max_ts == 0 and not base_ts and time_ms > 1000:
+			base_ts = time_ms
+			continue
+		max_ts = max(time_ms, max_ts)
+		if base_ts:
+#			print "fscked clock: used %f instead of %f" % (time_ms - base_ts, time_ms)
+			time_ms -= base_ts
 		m = split_re.match (t.group(2))
 
 		if m is None:
