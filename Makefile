@@ -5,11 +5,6 @@ PKG_TARBALL=$(PKG_NAME)-$(VER).tar.bz2
 CC = gcc
 CFLAGS = -g -Wall -O0
 
-BINDIR ?= /usr/bin
-PY_LIBDIR ?= /usr/lib/python2.6
-PY_SITEDIR ?= $(PY_LIBDIR)/site-packages
-LIBC_A_PATH = /usr/lib
-
 COLLECTOR = \
 	collector/collector.o \
 	collector/output.o \
@@ -26,7 +21,7 @@ bootchart-collector: $(COLLECTOR)
 	$(CC) -pthread -Icollector -o $@ $^
 
 py-install-compile:
-	PKG_VER=$(VER) python setup.py install
+	PKG_VER=$(VER) python setup.py install --root=$(DESTDIR)/
 
 install-chroot:
 	install -d $(DESTDIR)/lib/bootchart/tmpfs
