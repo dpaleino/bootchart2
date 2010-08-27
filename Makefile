@@ -27,7 +27,7 @@ bootchart-collector: $(COLLECTOR)
 	$(CC) -pthread -Icollector -o $@ $^
 
 py-install-compile:
-	PKG_VER=$(VER) python setup.py install --root=$(DESTDIR)
+	PKG_VER=$(VER) python setup.py install --root=$(DESTDIR)/
 
 install-chroot:
 	install -d $(DESTDIR)/lib/bootchart/tmpfs
