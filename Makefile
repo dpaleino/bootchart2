@@ -1,6 +1,7 @@
 VER=0.12.3
 PKG_NAME=bootchart2
 PKG_TARBALL=$(PKG_NAME)-$(VER).tar.bz2
+DESTDIR=
 
 CC = gcc
 CFLAGS = -g -Wall -O0
@@ -26,7 +27,7 @@ bootchart-collector: $(COLLECTOR)
 	$(CC) -pthread -Icollector -o $@ $^
 
 py-install-compile:
-	PKG_VER=$(VER) python setup.py install
+	PKG_VER=$(VER) python setup.py install --root=$(DESTDIR)
 
 install-chroot:
 	install -d $(DESTDIR)/lib/bootchart/tmpfs
