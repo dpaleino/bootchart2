@@ -26,7 +26,7 @@ py-install-compile:
 	PKG_VER=$(VER) python setup.py install --root=$(DESTDIR)/ --prefix=$(PREFIX)
 
 install-chroot:
-	install -d $(DESTDIR)/$(PREFIX)/lib/bootchart/tmpfs
+	install -d $(DESTDIR)/lib/bootchart/tmpfs
 
 install-collector: all install-chroot
 	install -m 755 -D bootchartd $(DESTDIR)/$(PREFIX)/sbin/bootchartd
