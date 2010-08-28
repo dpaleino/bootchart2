@@ -7,13 +7,16 @@ if 'PKG_VER' in environ:
 else:
     VERSION = ''
 
-
-class our_install_scripts(install_scripts):
+class pbg_install_scripts(install_scripts):
     def run(self):
         install_scripts.run(self)
         for file in self.get_outputs():
             if file.endswith('.py'):
-                rename(file, file[:-3])
+                if self.dry_run:
+                    # i'm currently broken. way to go!
+                    pass
+                else:
+                    rename(file, file[:-3]) 
 
 setup(name = 'pybootchartgui',
       version = VERSION,
@@ -27,6 +30,6 @@ setup(name = 'pybootchartgui',
       package_dir = {'pybootchartgui': 'pybootchartgui'},
 
       scripts = ['pybootchartgui.py'],
-      cmdclass = {'install_scripts': our_install_scripts}
+      cmdclass = {'install_scripts': pbg_install_scripts}
       )
 
